@@ -1,0 +1,9 @@
+#!/bin/bash
+
+set -e
+
+make -j4 all
+pushd examples-api-use/
+make -j4
+popd
+sudo ./examples-api-use/demo -D 0 --led-rows=64 --led-pwm-bits=1 --led-show-refresh
