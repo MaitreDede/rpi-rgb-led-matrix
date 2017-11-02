@@ -500,73 +500,37 @@ void Framebuffer::DumpToMatrix(GPIO *io)
 
   color_clk_mask |= h.clock;
 
-  const gpio_bits_t row_mask = h.a | h.b | h.c | h.d | h.e;
-
-  gpio_bits_t row_address;
-
-  // info needed for interlace mode.
-  uint8_t rot_bits = 0;
-  switch (double_rows_)
-  {
-  case 4:
-    rot_bits = 1;
-    break;
-  case 8:
-    rot_bits = 2;
-    break;
-  case 16:
-    rot_bits = 3;
-    break;
-  case 32:
-    rot_bits = 4;
-    break;
-  }
-
+  const gpio_bits_t mask_a = h.a;
+  const gpio_bits_t mask_ab = h.a | h.b;
   const int pwm_to_show = pwm_bits_; // Local copy, might change in process.
-  for (uint8_t row_loop = 0; row_loop < double_rows_; ++row_loop)
+
+  for (int b = kBitPlanes - pwm_to_show; b < kBitPlanes; ++b)
   {
-    uint8_t d_row;
-    switch (scan_mode_)
+    for (uint8_t scan = 0; scan < 32; scan++)
     {
-    case 0: // progressive
-    default:
-      d_row = row_loop;
-      break;
-
-    case 1: // interlaced
-      d_row = ((row_loop << 1) | (row_loop >> rot_bits)) & row_mask_;
-    }
-
-    row_address = (d_row & 0x01) ? h.a : 0;
-    row_address |= (d_row & 0x02) ? h.b : 0;
-    row_address |= (d_row & 0x04) ? h.c : 0;
-    row_address |= (d_row & 0x08) ? h.d : 0;
-    row_address |= (d_row & 0x10) ? h.e : 0;
-
-    // Rows can't be switched very quickly without ghosting, so we do the
-    // full PWM of one row before switching rows.
-    for (int b = kBitPlanes - pwm_to_show; b < kBitPlanes; ++b)
-    {
-      gpio_bits_t *row_data = ValueAt(d_row, 0, b);
-      // While the output enable is still on, we can already clock in the next
-      // data.
-      for (int col = 0; col < columns_; ++col)
-      {
-        const gpio_bits_t &out = *row_data++;
-        io->WriteMaskedBits(out, color_clk_mask); // col + reset clock
-        io->SetBits(h.clock);                     // Rising edge: clock color in.
-      }
-      io->ClearBits(color_clk_mask); // clock back to normal.
-
-      // OE of the previous row-data must be finished before strobe.
       sOutputEnablePulser->WaitPulseFinished();
-
-      // Setting address and strobing needs to happen in dark time.
-      io->WriteMaskedBits(row_address, row_mask); // Set row address
-      io->SetBits(h.strobe);                      // Strobe in the previously clocked in row.
+      for (uint8_t row = 0; row < 64; row++)
+      {
+        if (row == scan)
+        {
+          for (int col = 0; col < columns_; ++col)
+          {
+            const gpio_bits_t &out = *ValueAt(row, col, b);
+            io->WriteMaskedBits(out, color_clk_mask); // col + reset clock
+            io->SetBits(h.clock);                     // Rising edge: clock color in.
+          }
+          io->ClearBits(color_clk_mask); // clock back to normal.
+          io->SetBits(mask_a);
+          io->ClearBits(mask_a);
+        }
+        else
+        {
+          io->SetBits(mask_ab);
+          io->ClearBits(mask_ab);
+        }
+      }
+      io->SetBits(h.strobe); // Strobe in the previously clocked in row.
       io->ClearBits(h.strobe);
-
-      // Now switch on for the sleep time necessary for that bit-plane.
       sOutputEnablePulser->SendPulse(b);
     }
   }
