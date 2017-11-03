@@ -508,25 +508,30 @@ void Framebuffer::DumpToMatrix(GPIO *io)
   {
     for (uint8_t scan = 0; scan < 32; scan++)
     {
+      int row = (scan + 31) % 32;
       sOutputEnablePulser->WaitPulseFinished();
-      for (uint8_t row = 0; row < 64; row++)
+
+      for (int col = 0; col < columns_; ++col)
       {
-        if (row == scan)
+        const gpio_bits_t &out = *ValueAt(row, col, b);
+        io->WriteMaskedBits(out, color_clk_mask); // col + reset clock
+        io->SetBits(h.clock);                     // Rising edge: clock color in.
+      }
+      io->ClearBits(color_clk_mask); // clock back to normal.
+
+      if (scan == 0)
+      {
+        io->SetBits(h.a);
+        io->ClearBits(h.a);
+        io->SetBits(h.b);
+      }
+      else
+      {
+        io->SetBits(h.a);
+        io->ClearBits(h.a);
+        if (scan == 31)
         {
-          for (int col = 0; col < columns_; ++col)
-          {
-            const gpio_bits_t &out = *ValueAt(row, col, b);
-            io->WriteMaskedBits(out, color_clk_mask); // col + reset clock
-            io->SetBits(h.clock);                     // Rising edge: clock color in.
-          }
-          io->ClearBits(color_clk_mask); // clock back to normal.
-          io->SetBits(mask_a);
-          io->ClearBits(mask_a);
-        }
-        else
-        {
-          io->SetBits(mask_ab);
-          io->ClearBits(mask_ab);
+          io->ClearBits(h.b);
         }
       }
       io->SetBits(h.strobe); // Strobe in the previously clocked in row.
