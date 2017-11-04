@@ -428,6 +428,8 @@ void Framebuffer::DumpToMatrix(GPIO *io) {
   case 32: rot_bits = 4; break;
   }
 
+#define AB_EXPERIMENT 1
+
   const int pwm_to_show = pwm_bits_;  // Local copy, might change in process.
   for (uint8_t row_loop = 0; row_loop < double_rows_; ++row_loop) {
     uint8_t d_row;
@@ -447,6 +449,8 @@ void Framebuffer::DumpToMatrix(GPIO *io) {
     row_address |= (d_row & 0x08) ? h.d : 0;
     row_address |= (d_row & 0x10) ? h.e : 0;
 
+    bool row_address_change = true;
+
     // Rows can't be switched very quickly without ghosting, so we do the
     // full PWM of one row before switching rows.
     for (int b = kBitPlanes - pwm_to_show; b < kBitPlanes; ++b) {
@@ -464,7 +468,22 @@ void Framebuffer::DumpToMatrix(GPIO *io) {
       sOutputEnablePulser->WaitPulseFinished();
 
       // Setting address and strobing needs to happen in dark time.
+#if AB_EXPERIMENT
+#     define my_clk h.a
+#     define my_data h.b
+      if (row_address_change) {
+        for (int activate = 0; activate < double_rows_; ++activate) {
+          io->WriteMaskedBits(0, my_clk);
+          io->WriteMaskedBits((activate == (double_rows_ - 1 - d_row)) ? 0 : my_data, my_data);
+          io->WriteMaskedBits(my_clk, my_clk);
+        }
+        io->WriteMaskedBits(0, my_clk);
+        io->WriteMaskedBits(my_clk, my_clk);
+        row_address_change = false;
+      }
+#else
       io->WriteMaskedBits(row_address, row_mask);  // Set row address
+#endif
       io->SetBits(h.strobe);   // Strobe in the previously clocked in row.
       io->ClearBits(h.strobe);
 
