@@ -6,4 +6,4 @@ make -j4 all
 pushd examples-api-use/
 make -j4
 popd
-sudo ./examples-api-use/demo --led-rows=64 --led-pwm-bits=11 --led-show-refresh --led-chain=2 --led-rgb-sequence=RBG --led-slowdown-gpio=4 -D $1
+sudo ./examples-api-use/demo --led-rows=64 --led-pwm-bits=3 --led-show-refresh --led-chain=2 --led-rgb-sequence=RBG --led-slowdown-gpio=4 -D $1
